@@ -10,7 +10,6 @@ WORKDIR "/src/APICombination"
 RUN dotnet publish "APICombination.csproj" \
 	--configuration Release \
 	--output /app/publish \
-	--no-restore \
 	/p:UseAppHost=false
 
 # Runtime stage
