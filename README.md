@@ -17,6 +17,30 @@ Issue Investigator is a small .NET 10 Blazor application that compares a public 
 
 No API key, account, database, or paid service is required for the basic flow. Optional credentials can increase API quotas.
 
+## Run with Docker
+
+Install Docker Desktop, create a local `.env` file from `.env.example`, and set the two credential values. The `.env` file is ignored by Git and is passed to the container only at runtime.
+
+From the repository root, run:
+
+```powershell
+Copy-Item .env.example .env
+# Edit .env and replace both placeholder values.
+docker compose up --build
+```
+
+Open `http://localhost:8080`. The container listens on port `8080`; HTTPS should be provided by the hosting platform or a reverse proxy in production.
+
+Stop the application with `Ctrl+C`, or run it in the background with:
+
+```powershell
+docker compose up --build -d
+docker compose logs -f
+docker compose down
+```
+
+The multi-stage image excludes local build output, tests, IDE files, and local configuration through `.dockerignore`. Never commit `.env`; commit only `.env.example`.
+
 ## Optional API credentials
 
 Credentials are loaded from the `ApiCredentials` configuration section and are optional. If they are absent, the application uses anonymous API access.
@@ -52,3 +76,5 @@ The NUnit test project covers URL parsing and Stack Overflow query transformatio
 ```powershell
 dotnet test APICombination.Tests/APICombination.Tests.csproj
 ```
+
+The production Docker image does not include the test project. Run tests on the host before building the image.

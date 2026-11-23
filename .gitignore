@@ -30,3 +30,8 @@ project.packagespec.json
 
 # ASP.NET Core development artifacts
 appsettings.Local.json
+
+# Local secrets
+.env
+.env.*
+!.env.example
