@@ -1,0 +1,32 @@
+﻿# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug*/
+[Rr]elease*/
+[Aa]rtifacts/
+
+# Test and coverage output
+TestResults/
+*.trx
+coverage/
+coverage-*
+
+# Local tooling and generated files
+.idea/
+session-state/
+*.nupkg
+*.snupkg
+project.assets.json
+project.packagespec.json
+*.nuget.g.props
+*.nuget.g.targets
+
+# ASP.NET Core development artifacts
+appsettings.Local.json

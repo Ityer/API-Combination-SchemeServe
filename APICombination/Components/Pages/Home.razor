@@ -1,0 +1,199 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@using APICombination.Services
+@inject IIssueInvestigator Investigator
+@inject IRepositoryReferenceParser RepositoryParser
+
+<PageTitle>Issue Investigator</PageTitle>
+
+<section class="investigator-shell">
+    <div class="hero">
+        <p class="eyebrow">Issue Investigator</p>
+        <h1>Find answers hiding in plain sight.</h1>
+        <p>Point to a public GitHub repository or issue and compare it with related Stack Overflow questions.</p>
+    </div>
+
+    <form class="search-panel" @onsubmit="FindRepositoryAsync" @onsubmit:preventDefault>
+        <label for="repository-url">GitHub repository or issue URL</label>
+        <div class="input-row">
+            <input id="repository-url" class="form-control" @bind="repositoryUrl"
+                   placeholder="https://github.com/dotnet/runtime" autocomplete="url" />
+            <button class="btn btn-primary" type="submit" disabled="@isLoading">Find issues</button>
+        </div>
+        <small>Use a repository URL, or include an issue path such as <code>/issues/123</code>.</small>
+    </form>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger" role="alert">@errorMessage</div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="loading" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span> @loadingMessage</div>
+    }
+
+    @if (openIssues.Count > 0 && investigation is null)
+    {
+        <section class="issue-picker">
+            <h2>Open issues</h2>
+            <p>Select an issue to search Stack Overflow.</p>
+            <div class="issue-list">
+                @foreach (var issue in openIssues)
+                {
+                    <button class="issue-option" @onclick="() => InvestigateAsync(issue.Number)" disabled="@isLoading">
+                        <span>#@issue.Number</span>
+                        <strong>@issue.Title</strong>
+                        <small>@issue.Labels.Count label(s)</small>
+                    </button>
+                }
+            </div>
+        </section>
+    }
+    else if (!isLoading && hasSearched && openIssues.Count == 0 && investigation is null && string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="empty-state">No open issues were found in this repository.</div>
+    }
+
+    @if (investigation is not null)
+    {
+        <div class="results-grid">
+            <article class="github-card result-card">
+                <div class="card-heading"><span class="badge bg-dark">GitHub issue</span><a href="@investigation.Issue.HtmlUrl" target="_blank" rel="noopener">Open on GitHub ↗</a></div>
+                <h2>@IssueTitleFormatter.RemoveLeadingIssueNumber(investigation.Issue.Title)</h2>
+                <p class="issue-body">@(string.IsNullOrWhiteSpace(investigation.Issue.Body) ? "This issue has no description." : investigation.Issue.Body)</p>
+                <div class="labels">
+                    @foreach (var label in investigation.Issue.Labels)
+                    {
+                        <span class="label">@label.Name</span>
+                    }
+                </div>
+            </article>
+
+            <section class="stackoverflow-card result-card">
+                <div class="card-heading"><span class="badge bg-primary">Stack Overflow</span><span>@investigation.Questions.Count result(s)</span></div>
+                <h2>Potentially relevant questions</h2>
+                @if (investigation.Questions.Count == 0)
+                {
+                    <p class="empty-state">No matching Stack Overflow questions were found.</p>
+                    <form class="custom-search" @onsubmit="SearchCustomAsync" @onsubmit:preventDefault>
+                        <label for="custom-search-query">Try a custom Stack Overflow search</label>
+                        <div class="input-row">
+                            <input id="custom-search-query" class="form-control" @bind="customSearchQuery" placeholder="e.g. TestServer HttpClient cancellation" />
+                            <button class="btn btn-primary" type="submit" disabled="@isLoading || string.IsNullOrWhiteSpace(customSearchQuery)">Search</button>
+                        </div>
+                    </form>
+                }
+                else
+                {
+                    <div class="question-list">
+                        @foreach (var question in investigation.Questions)
+                        {
+                            <article class="question">
+                                <a href="@question.Link" target="_blank" rel="noopener">@question.Title</a>
+                                <div class="question-meta"><span>@question.Score score</span><span>@question.AnswerCount answer(s)</span><span class="@(question.IsAnswered ? "answered" : "unanswered")">@(question.IsAnswered ? "Answered" : "Unanswered")</span></div>
+                                <div class="tags">@foreach (var tag in question.Tags) { <span>@tag</span> }</div>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+    }
+</section>
+
+@code {
+    private string repositoryUrl = string.Empty;
+    private readonly List<GitHubIssue> openIssues = [];
+    private InvestigationResult? investigation;
+    private string? errorMessage;
+    private string loadingMessage = "Loading…";
+    private string customSearchQuery = string.Empty;
+    private bool isLoading;
+    private bool hasSearched;
+
+    private async Task FindRepositoryAsync()
+    {
+        ResetState();
+        if (!RepositoryParser.TryParse(repositoryUrl, out _, out var issueNumber, out var error))
+        {
+            errorMessage = error;
+            return;
+        }
+
+        if (issueNumber is not null)
+        {
+            await InvestigateAsync(issueNumber.Value);
+            return;
+        }
+
+        isLoading = true;
+        loadingMessage = "Loading open GitHub issues…";
+        try
+        {
+            openIssues.AddRange(await Investigator.GetOpenIssuesAsync(repositoryUrl));
+            hasSearched = true;
+        }
+        catch (ApiRequestException exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SearchCustomAsync()
+    {
+        if (investigation is null || string.IsNullOrWhiteSpace(customSearchQuery))
+        {
+            return;
+        }
+
+        isLoading = true;
+        loadingMessage = "Searching Stack Overflow…";
+        errorMessage = null;
+        try
+        {
+            var questions = await Investigator.SearchStackOverflowAsync(customSearchQuery);
+            investigation = investigation with { Questions = questions };
+        }
+        catch (ApiRequestException exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task InvestigateAsync(int issueNumber)
+    {
+        isLoading = true;
+        loadingMessage = "Loading the issue and searching Stack Overflow…";
+        errorMessage = null;
+        try
+        {
+            investigation = await Investigator.InvestigateAsync(repositoryUrl, issueNumber);
+        }
+        catch (ApiRequestException exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ResetState()
+    {
+        openIssues.Clear();
+        investigation = null;
+        errorMessage = null;
+        hasSearched = false;
+        customSearchQuery = string.Empty;
+    }
+}
