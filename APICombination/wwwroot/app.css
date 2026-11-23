@@ -21,6 +21,7 @@ html, body {
 .question { border-top: 1px solid #e5e7eb; padding: .8rem 0; }
 .question a { font-weight: 600; }
 .question-meta { display: flex; flex-wrap: wrap; gap: .75rem; color: #64748b; font-size: .85rem; margin: .35rem 0; }
+.results-pagination { display: flex; justify-content: center; align-items: center; gap: 1rem; border-top: 1px solid #e5e7eb; padding-top: 1rem; margin-top: .4rem; color: #64748b; font-size: .9rem; }
 .answered { color: #15803d; } .unanswered { color: #b45309; }
 .empty-state { color: #64748b; padding: .75rem 0; }
 .custom-search { border-top: 1px solid #e5e7eb; padding-top: 1rem; margin-top: 1rem; }

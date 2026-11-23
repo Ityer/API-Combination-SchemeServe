@@ -9,4 +9,6 @@ public interface IGitHubClient
 public interface IStackExchangeClient
 {
     Task<IReadOnlyList<StackOverflowQuestion>> SearchQuestionsAsync(string query, CancellationToken cancellationToken = default);
+    Task<IReadOnlyDictionary<int, string>> GetTopAnswerExcerptsAsync(
+        IReadOnlyCollection<int> questionIds, CancellationToken cancellationToken = default);
 }

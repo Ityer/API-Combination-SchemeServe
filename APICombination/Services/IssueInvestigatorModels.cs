@@ -19,7 +19,9 @@ public sealed record StackOverflowQuestion(
     int Score,
     int AnswerCount,
     bool IsAnswered,
-    IReadOnlyList<string> Tags);
+    IReadOnlyList<string> Tags,
+    int RelevanceScore = 0,
+    string? TopAnswerExcerpt = null);
 
 public sealed record InvestigationResult(
     GitHubIssue Issue,

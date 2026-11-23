@@ -110,6 +110,30 @@ public sealed class IssueInvestigatorTests
     }
 
     [Test]
+    public void RelevanceScoreRewardsTitleAndTagEvidence()
+    {
+        var question = new StackOverflowQuestion(1, "How to use HttpClient cancellation", "https://stackoverflow.com/q/1", 10, 2, true, ["c#", "httpclient"]);
+
+        var score = IssueInvestigator.CalculateRelevanceScore(
+            ["HttpClient", "cancellation"], ["request"], ["httpclient"], question,
+            "Use cancellation tokens with HttpClient requests.");
+
+        Assert.That(score, Is.GreaterThanOrEqualTo(80));
+    }
+
+    [Test]
+    public void RelevanceScoreDoesNotTreatUnrelatedQuestionAsStrongMatch()
+    {
+        var question = new StackOverflowQuestion(1, "How to center a div", "https://stackoverflow.com/q/1", 10, 2, true, ["html", "css"]);
+
+        var score = IssueInvestigator.CalculateRelevanceScore(
+            ["HttpClient", "cancellation"], ["request"], ["httpclient"], question,
+            "Use a flexbox container.");
+
+        Assert.That(score, Is.EqualTo(0));
+    }
+
+    [Test]
     public async Task GitHubClientUsesConfiguredBearerToken()
     {
         var handler = new RecordingHandler("{\"number\":1,\"title\":\"Test\",\"html_url\":\"https://github.com/a/b/issues/1\",\"labels\":[]}");
@@ -157,6 +181,19 @@ public sealed class IssueInvestigatorTests
         await client.SearchQuestionsAsync("test query");
 
         Assert.That(handler.RequestCount, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task StackExchangeClientParsesTopAnswerExcerpt()
+    {
+        var handler = new RecordingHandler("{\"items\":[{\"question_id\":42,\"body\":\"<p>Use <code>HttpClient</code> here.</p>\"}]}");
+        var client = new StackExchangeClient(CreateHttpClient(handler), Options.Create(new ApiCredentials()));
+
+        var answers = await client.GetTopAnswerExcerptsAsync([42]);
+
+        Assert.That(answers[42], Is.EqualTo("Use HttpClient here."));
+        Assert.That(handler.LastRequest!.RequestUri!.PathAndQuery, Does.Contain("answers/42"));
+        Assert.That(handler.LastRequest.RequestUri.Query, Does.Contain("sort=votes"));
     }
 
     private static HttpClient CreateHttpClient(HttpMessageHandler handler) => new(handler)

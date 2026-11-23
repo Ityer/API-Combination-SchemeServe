@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 
@@ -79,6 +80,56 @@ public sealed class StackExchangeClient(HttpClient httpClient, IOptions<ApiCrede
         {
             throw new ApiRequestException($"Stack Overflow could not be reached: {exception.Message}", null);
         }
+    }
+
+    public async Task<IReadOnlyDictionary<int, string>> GetTopAnswerExcerptsAsync(
+        IReadOnlyCollection<int> questionIds, CancellationToken cancellationToken = default)
+    {
+        if (questionIds.Count == 0)
+        {
+            return new Dictionary<int, string>();
+        }
+
+        var ids = string.Join(';', questionIds.Take(20));
+        var keyParameter = apiKey is null ? string.Empty : $"&key={Uri.EscapeDataString(apiKey)}";
+        var uri = $"answers/{ids}?site=stackoverflow&order=desc&sort=votes&filter=withbody{keyParameter}";
+
+        try
+        {
+            using var response = await httpClient.GetAsync(uri, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new Dictionary<int, string>();
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<AnswerResponse>(cancellationToken: cancellationToken);
+            return result?.Items
+                .Where(answer => !string.IsNullOrWhiteSpace(answer.Body))
+                .GroupBy(answer => answer.QuestionId)
+                .ToDictionary(group => group.Key, group => HtmlToText(group.First().Body))
+                ?? new Dictionary<int, string>();
+        }
+        catch (HttpRequestException)
+        {
+            return new Dictionary<int, string>();
+        }
+    }
+
+    private static string HtmlToText(string html)
+    {
+        var text = Regex.Replace(html, "<[^>]+>", " ");
+        return System.Net.WebUtility.HtmlDecode(Regex.Replace(text, "\\s+", " ")).Trim();
+    }
+
+    private sealed class AnswerResponse
+    {
+        [JsonPropertyName("items")] public List<AnswerItem> Items { get; set; } = [];
+    }
+
+    private sealed class AnswerItem
+    {
+        [JsonPropertyName("question_id")] public int QuestionId { get; set; }
+        [JsonPropertyName("body")] public string Body { get; set; } = string.Empty;
     }
 
     private static Task DelayForRetryAsync(TimeSpan? retryAfter, CancellationToken cancellationToken)

@@ -92,15 +92,27 @@
                 else
                 {
                     <div class="question-list">
-                        @foreach (var question in investigation.Questions)
+                        @foreach (var question in PagedQuestions)
                         {
                             <article class="question">
                                 <a href="@question.Link" target="_blank" rel="noopener">@question.Title</a>
-                                <div class="question-meta"><span>@question.Score score</span><span>@question.AnswerCount answer(s)</span><span class="@(question.IsAnswered ? "answered" : "unanswered")">@(question.IsAnswered ? "Answered" : "Unanswered")</span></div>
+                                <div class="question-meta"><span class="relevance-score">@question.RelevanceScore% relevant</span><span>@question.Score score</span><span>@question.AnswerCount answer(s)</span><span class="@(question.IsAnswered ? "answered" : "unanswered")">@(question.IsAnswered ? "Answered" : "Unanswered")</span></div>
+                                @if (!string.IsNullOrWhiteSpace(question.TopAnswerExcerpt))
+                                {
+                                    <p class="answer-excerpt">Top answer: @question.TopAnswerExcerpt</p>
+                                }
                                 <div class="tags">@foreach (var tag in question.Tags) { <span>@tag</span> }</div>
                             </article>
                         }
                     </div>
+                    @if (TotalResultPages > 1)
+                    {
+                        <div class="results-pagination" aria-label="Stack Overflow result pages">
+                            <button class="btn btn-outline-secondary" type="button" @onclick="PreviousResultsPage" disabled="@(currentResultsPage == 1)">Previous</button>
+                            <span>Page @currentResultsPage of @TotalResultPages</span>
+                            <button class="btn btn-outline-secondary" type="button" @onclick="NextResultsPage" disabled="@(currentResultsPage == TotalResultPages)">Next</button>
+                        </div>
+                    }
                 }
             </section>
         </div>
@@ -116,6 +128,33 @@
     private string customSearchQuery = string.Empty;
     private bool isLoading;
     private bool hasSearched;
+    private const int ResultsPerPage = 5;
+    private int currentResultsPage = 1;
+
+    private IEnumerable<StackOverflowQuestion> PagedQuestions => investigation?.Questions
+        .Skip((currentResultsPage - 1) * ResultsPerPage)
+        .Take(ResultsPerPage)
+        ?? [];
+
+    private int TotalResultPages => investigation is null
+        ? 0
+        : (int)Math.Ceiling(investigation.Questions.Count / (double)ResultsPerPage);
+
+    private void PreviousResultsPage()
+    {
+        if (currentResultsPage > 1)
+        {
+            currentResultsPage--;
+        }
+    }
+
+    private void NextResultsPage()
+    {
+        if (currentResultsPage < TotalResultPages)
+        {
+            currentResultsPage++;
+        }
+    }
 
     private async Task FindRepositoryAsync()
     {
@@ -163,6 +202,7 @@
         {
             var questions = await Investigator.SearchStackOverflowAsync(customSearchQuery);
             investigation = investigation with { Questions = questions };
+            currentResultsPage = 1;
         }
         catch (ApiRequestException exception)
         {
@@ -182,6 +222,7 @@
         try
         {
             investigation = await Investigator.InvestigateAsync(repositoryUrl, issueNumber);
+            currentResultsPage = 1;
         }
         catch (ApiRequestException exception)
         {
@@ -196,6 +237,7 @@
     private void BackToIssueList()
     {
         investigation = null;
+        currentResultsPage = 1;
         customSearchQuery = string.Empty;
         errorMessage = null;
     }
@@ -204,6 +246,7 @@
     {
         openIssues.Clear();
         investigation = null;
+        currentResultsPage = 1;
         errorMessage = null;
         hasSearched = false;
         customSearchQuery = string.Empty;
