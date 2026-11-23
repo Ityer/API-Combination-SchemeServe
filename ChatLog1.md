@@ -1479,3 +1479,180 @@ Updated `Dockerfile` to allow `dotnet publish` to regenerate the complete static
 - Confirmed the root page returns `HTTP 200`.
 - All 13 NUnit tests pass.
 - Removed temporary publish artifacts.
+
+___
+
+## :bust_in_silhouette:
+would it be possible to parse some of the top answers, compare to the issue, and give a score for how likeley it is to be a relevant answer and show that score on the results, sorting by result?
+## :speech_balloon: GitHub Copilot
+1.  :white_check_mark:
+I’m starting by tracing the current Stack Exchange result model, client, orchestration, and Blazor rendering so the ranking feature fits the existing contracts.
+
+1. Read 2 projects :white_check_mark:
+1. Read 7 files for 'StackExchange', 'IssueInvestigator', 'Home.razor', 'Models' :white_check_mark:
+1. Found 33 matches for StackOverflowQuestion|SearchQuestionsAsync|Questions|question_id|Answer :white_check_mark:
+1. Read IssueInvestigatorModels.cs, lines 1-140 :white_check_mark:
+1. Read StackExchangeClient.cs, lines 1-220 :white_check_mark:
+1. Read IssueInvestigator.cs, lines 1-140 :white_check_mark:
+1. Read IApiClients.cs, lines 1-120 :white_check_mark:
+1. Read Home.razor, lines 65-190 :white_check_mark:
+1. Read IssueInvestigatorTests.cs, lines 1-230 :white_check_mark:
+The existing results contain only question metadata. I’ll add a bounded answer lookup using Stack Exchange’s `answers/{ids}` endpoint, extract plain text from the top voted answers, and compute a deterministic 0–100 score from issue keywords plus question/tag overlap. Results without answer data will remain visible with a zero score.
+ 1. Modifying IssueInvestigatorModels.cs
+ 1. Modifying IApiClients.cs
+ 1. Modifying StackExchangeClient.cs
+ 1. Modifying IssueInvestigator.cs
+1. Read errors in APICombination/Services/IApiClients.cs :white_check_mark:
+The first edit placed the new method inside `SearchQuestionsAsync`, producing a syntax cascade. I’m correcting that structure before continuing; the scoring design itself remains unchanged.
+
+1. Read StackExchangeClient.cs, lines 1-210 :white_check_mark:
+1. Read StackExchangeClient.cs, lines 140-180 :white_check_mark:
+ 1. Modifying StackExchangeClient.cs
+
+1. Read errors in APICombination/Services/IssueInvestigator.cs :white_check_mark:
+1. Read StackExchangeClient.cs, lines 1-145 :white_check_mark:
+ 1. Modifying IssueInvestigator.cs
+ 1. Modifying Home.razor
+
+1. Read errors in APICombination/Components/Pages/Home.razor :white_check_mark:
+1. Read IssueInvestigator.cs, lines 25-100 :white_check_mark:
+ 1. Modifying IssueInvestigator.cs
+1. Read errors in APICombination/Components/Pages/Home.razor :white_check_mark:
+The core flow and UI are now connected. I’m adding focused tests for answer-body parsing and the new API request, then I’ll run the full build/test validation.
+1. Read IssueInvestigatorTests.cs, lines 110-240 :white_check_mark:
+ 1. Modifying IssueInvestigatorTests.cs
+
+1. Build successful :white_check_mark:
+1. Test run completed. Ran 14 test(s). 14 Passed, 0 Failed  :white_check_mark:
+Implemented answer-based relevance ranking for Stack Overflow results.
+
+### What changed
+
+- Retrieves the top-voted answer for up to 20 answered Stack Overflow questions.
+- Converts answer HTML into readable plain text.
+- Compares issue keywords from:
+  - GitHub issue title
+  - Issue description
+  - Issue labels
+- Calculates a deterministic relevance score from 0–100.
+- Sorts results by:
+  1. Relevance score
+  2. Answered status
+  3. Stack Overflow score
+- Displays the score on each result.
+- Displays a short top-answer excerpt when available.
+- Keeps unanswered questions visible with a score of `0%`.
+- Gracefully falls back if answer retrieval fails or is rate-limited.
+
+### Validation
+
+- Solution build succeeded.
+- All 14 NUnit tests passed.
+- Added test coverage for:
+  - Answer endpoint construction
+  - Vote sorting request
+  - HTML-to-text answer parsing
+
+___
+
+## :bust_in_silhouette:
+scores seem a little low on the tests ive been doing
+## :speech_balloon: GitHub Copilot
+1.  :white_check_mark:
+I’m tracing the current keyword list and score calculation first. The screenshot suggests the score is being diluted by many issue keywords that are not expected to appear verbatim in a Stack Overflow result.
+
+1. Read IssueInvestigator.cs, lines 50-120 :white_check_mark:
+1. Read KeywordExtractor.cs, lines 1-240 :white_check_mark:
+1. Read StackOverflowQueryBuilder.cs, lines 1-160 :white_check_mark:
+1. Read IssueInvestigatorTests.cs, lines 1-220 :white_check_mark:
+The dilution is confirmed: the current code extracts up to 12 mixed tokens, then divides by all 12 even when only a few are meaningful. I’ll recalibrate around evidence strength instead: title matches are strongest, tags are strong signals, answer matches support the score, and the denominator will reflect meaningful extracted terms rather than unrelated issue prose.
+I’m replacing the flat percentage with a weighted score and exposing the scorer internally through a small service method so it can be tested directly. The score will still be a heuristic percentage, not an AI confidence probability.
+ 1. Modifying IssueInvestigator.cs
+ 1. Modifying IssueInvestigatorTests.cs
+1. Read errors in APICombination.Tests/IssueInvestigatorTests.cs :white_check_mark:
+The calibrated scorer is implemented and the focused tests compile cleanly. I’m running the complete build and test suite now.
+1. Ran run_build :white_check_mark:
+The build caught an accessibility issue because the test project is a separate assembly. I’m making the scorer public for direct regression coverage; this does not change runtime behavior.
+ 1. Modifying IssueInvestigator.cs
+1. Ran run_build :white_check_mark:
+Visual Studio’s active Hot Reload session is blocking the metadata change (`ENC0047`). I’m validating with a clean command-line build/test process, which will confirm the source changes independently of the running debug session.
+1. Command executed: dotnet build APICombination.slnx --no-restore; dotnet test APICombination.Tests/APICombination.Tests.csproj --no-restore --no-build :white_check_mark:
+The scores were low because the old calculation was:
+
+> matched keywords ÷ all extracted keywords
+
+It treated every keyword equally and diluted the score with generic issue-description terms.
+
+### Updated scoring
+
+The new heuristic gives different weights to evidence:
+
+- **Question title match:** strongest signal
+- **Stack Overflow tag match:** strong signal
+- **Answer text match:** supporting signal
+- Supports simple singular/plural variations
+- Keeps unrelated results near `0%`
+- Still returns a score from `0–100%`
+
+For example, a question matching the issue’s title and tags should now score roughly `80–100%`, while a result matching only a generic answer term should remain much lower.
+
+### Validation
+
+- Added tests for strong and unrelated matches.
+- All 14 tests pass.
+
+The full Visual Studio build is currently blocked because the app is still running and locking:
+
+`APICombination.exe`
+
+Stop the active debug session, then rebuild. This is also required for Visual Studio Hot Reload to apply the scorer visibility change (`ENC0047`).
+
+___
+
+## :bust_in_silhouette:
+lets paginate the results with a next and prev button for 5 results at a time. no need for a new api call just store the results
+## :speech_balloon: GitHub Copilot
+1.  :white_check_mark:
+I’m checking the full page state flow and existing styling so pagination resets correctly after both normal investigations and custom searches.
+
+1. Read Home.razor, lines 1-260 :white_check_mark:
+1. Found 50 matches for question-list|question-meta|btn|pagination :white_check_mark:
+1. Read app.css, lines 1-260 :white_check_mark:
+ 1. Modifying Home.razor
+ 1. Modifying app.css
+The controls now paginate only the existing list. I’m wiring page reset into the state transitions so a new repository search, issue investigation, or custom result set always starts on page one.
+1. Read Home.razor, lines 135-250 :white_check_mark:
+ 1. Modifying Home.razor
+
+1. Read errors in APICombination/Components/Pages/Home.razor :white_check_mark:
+1. Build successful :white_check_mark:
+1. Test run completed. Ran 16 test(s). 16 Passed, 0 Failed  :white_check_mark:
+Implemented client-side pagination for Stack Overflow results.
+
+### Behavior
+
+- Shows **5 results per page**
+- Adds **Previous** and **Next** buttons
+- Disables Previous on the first page
+- Disables Next on the last page
+- Displays the current page, for example:
+
+`Page 2 of 8`
+
+### No additional API calls
+
+Pagination uses the already-loaded `investigation.Questions` collection with `Skip` and `Take`.
+
+### Page reset behavior
+
+Pagination resets to page 1 when:
+
+- A new repository search starts
+- A GitHub issue is investigated
+- A custom Stack Overflow search completes
+- The user returns to the issue list
+
+### Validation
+
+- Build succeeded
+- All 16 NUnit tests passed
