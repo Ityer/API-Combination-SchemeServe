@@ -57,6 +57,11 @@
 
     @if (investigation is not null)
     {
+        @if (openIssues.Count > 0)
+        {
+            <button class="btn btn-outline-secondary mb-3" type="button" @onclick="BackToIssueList" disabled="@isLoading">← Back to open issues</button>
+        }
+
         <div class="results-grid">
             <article class="github-card result-card">
                 <div class="card-heading"><span class="badge bg-dark">GitHub issue</span><a href="@investigation.Issue.HtmlUrl" target="_blank" rel="noopener">Open on GitHub ↗</a></div>
@@ -186,6 +191,13 @@
         {
             isLoading = false;
         }
+    }
+
+    private void BackToIssueList()
+    {
+        investigation = null;
+        customSearchQuery = string.Empty;
+        errorMessage = null;
     }
 
     private void ResetState()
